@@ -1,2 +1,2 @@
-rootProject.name='SauDrone'
+rootProject.name='Flight Controller'
 include ':app'

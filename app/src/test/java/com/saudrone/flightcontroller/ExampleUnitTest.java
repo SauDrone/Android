@@ -1,4 +1,4 @@
-package com.saudrone.controller;
+package com.saudrone.flightcontroller;
 
 import org.junit.Test;
 
