@@ -81,7 +81,7 @@ public class MainActivity extends AppCompatActivity {
                                         messageBuffer="";
                                     }else{ // 20 dan buyukse bu paket okunmaz, buffer temizlenir
                                         messageBuffer="";
-                                        Toast.makeText(MainActivity.this, "olmadiiiii", Toast.LENGTH_SHORT).show();
+                                        //Toast.makeText(MainActivity.this, "olmadiiiii", Toast.LENGTH_SHORT).show();
                                     }
                                 }else{ //birden fazla parca varsa (ben 1. yi okudum, sonuncuyu buffera attım
 
@@ -215,13 +215,13 @@ public class MainActivity extends AppCompatActivity {
                 public void run() {
                     try{
                         if (count > 10) {
-                            port.write(("0000000000000000.").getBytes(), 3);
+                            port.write(("1500150015001500.").getBytes(), 3);
                         }
                         //usbIoManager.writeAsync(("000000000000.").getBytes());
                     }catch (Exception e){
                     }
                 }
-            },0,5);
+            },0,4);
             Toast.makeText(this, "basarili", Toast.LENGTH_SHORT).show();
 
         }catch (Exception e){

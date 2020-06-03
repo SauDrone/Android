@@ -292,10 +292,10 @@
                         android:id="@+id/pitchRCTextView"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:textColor="#108319"
                         android:layout_weight="1"
                         android:gravity="center"
-                        android:text="0.00" />
+                        android:text="0"
+                        android:textColor="#108319" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -315,11 +315,11 @@
                     <TextView
                         android:id="@+id/rollRCTextView"
                         android:layout_width="match_parent"
-                        android:textColor="#108319"
                         android:layout_height="match_parent"
                         android:layout_weight="1"
                         android:gravity="center"
-                        android:text="0.00" />
+                        android:text="0"
+                        android:textColor="#108319" />
                 </LinearLayout>
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -339,10 +339,10 @@
                         android:id="@+id/throttleRCTextView"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:textColor="#108319"
                         android:layout_weight="1"
                         android:gravity="center"
-                        android:text="0.00" />
+                        android:text="0"
+                        android:textColor="#108319" />
                 </LinearLayout>
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -362,10 +362,10 @@
                         android:id="@+id/lidarTextView"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:textColor="#108319"
                         android:layout_weight="1"
                         android:gravity="center"
-                        android:text="0.00" />
+                        android:text="0"
+                        android:textColor="#108319" />
                 </LinearLayout>
             </LinearLayout>
 
