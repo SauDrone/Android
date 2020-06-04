@@ -12,10 +12,7 @@ import android.hardware.SensorManager;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
 import android.os.Bundle;
-import android.os.CountDownTimer;
-import android.view.View;
 import android.view.Window;
-import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -23,9 +20,7 @@ import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
-import com.saudrone.canvas.ArtificialHorizon;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Timer;
@@ -33,28 +28,23 @@ import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static java.lang.Math.PI;
-import static java.lang.Math.atan2;
-import static java.lang.Math.sqrt;
+import static com.saudrone.controller.MainActivity.port;
 
-public class MainActivity extends AppCompatActivity {
-    ArtificialHorizon artificialHorizon;
-    SeekBar armBar;
-    TextView textYaw,textPitch,textRoll,textGyroX,textGyroY,textGyroZ,textRCYaw,textRCPitch,textRCRoll,textRCThrottle,textDataHertz,textLidar;
+public class FlightScreen extends AppCompatActivity {
+    int yaw=1000,pitch=1000,roll=1000,throttle=1000,lidar=0;
+    int rcStatus=0;
+    int statusOneCounter=0;
+    int statusTwoCounter=0;
+    int statusThreeCounter=0;
+    TextView info;
     SensorManager gyroManager, accManager;
     Sensor gyroSensor, accSensor;
 
-    boolean connectionFlag=false,cominucationFlag=false;
-
-    //serial variables
-    public int count=0;
-    public int fark=0;
     public String messageBuffer ="";
 
-    Timer t;
 
+    public int count=0;
     private final ExecutorService mExecutor = Executors.newSingleThreadExecutor();
-    public static UsbSerialPort port;
     private SerialInputOutputManager mSerialIoManager;
     SerialInputOutputManager usbIoManager;
     private final SerialInputOutputManager.Listener mListener =
@@ -70,18 +60,17 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
-
                             String appended = messageBuffer + new String(data, StandardCharsets.US_ASCII);
                             if (appended.contains(".")){
                                 String[] parts = appended.split("\\.");
                                 if (parts.length == 1){ // parcanin sonunda extra paket yok
                                     if (parts[0].length() == 20){ // uzunluk dogru ama ileride butaya pariti kontrol de eklenmeli
                                         //log.append(parts[0]+" length:"+parts[0].length()+"\n");
-                                        if (count%20==0)
-                                        updateSerialDatas(parts[0]);
 
-
+                                        rcParse(parts[0]);
                                         count++;
+
+
                                         messageBuffer="";
                                     }else{ // 20 dan buyukse bu paket okunmaz, buffer temizlenir
                                         messageBuffer="";
@@ -106,8 +95,8 @@ public class MainActivity extends AppCompatActivity {
                                     if (!realmessage.isEmpty()){
 
                                         //log.append(realmessage+" length:"+realmessage.length()+"\n");
-                                        if (count%20==0)
-                                        updateSerialDatas(parts[0]);
+
+                                        rcParse(parts[0]);
                                         count++;
                                     }
                                 }
@@ -125,125 +114,53 @@ public class MainActivity extends AppCompatActivity {
             };
 
     public static final String INTENT_ACTION_GRANT_USB = BuildConfig.APPLICATION_ID + ".GRANT_USB";
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-
         this.requestWindowFeature(Window.FEATURE_NO_TITLE);
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        setContentView(R.layout.activity_flight_screen);
+
+        info=findViewById(R.id.textInfo);
+
         gyroManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         gyroSensor = gyroManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
 
         accManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         accSensor = accManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-        initViews();
 
         baglan();
-        new CountDownTimer(Long.MAX_VALUE, 1000) {
 
-            public void onTick(long millisUntilFinished) {
-
-                textDataHertz.setText(" Frekans:" + (count-fark)+" Hz");
-                fark=count;
-            }
-
-            public void onFinish() {
-
-            }
-        }.start();
-
-
-        armBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean b) {
-
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-                if (seekBar.getProgress()<95){
-                    armBar.setProgress(0);
-                }else{
-                    if (connectionFlag && cominucationFlag){
-                        usbIoManager.stop();
-                        mExecutor.shutdown();
-                        if(t != null) {
-                            t.cancel();
-                            t.purge();
-                            t = null;
-                        }
-                        Intent intent=new Intent(getApplicationContext(),FlightScreen.class);
-                        startActivity(intent);
-
-                    }else {
-                        Toast.makeText(MainActivity.this, "baglanti hatalari :(", Toast.LENGTH_SHORT).show();
-                    }
-                }
-            }
-        });
-
-
-    }
-
-    public void baglanEvent(View view) {
-        usbIoManager.writeAsync(("aaaaaaaaa").getBytes());
     }
 
 
     private void baglan(){
-        UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
 
-        List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(manager);
-
-        if (availableDrivers.isEmpty()) {
-            Toast.makeText(this, "cihaz yok", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        UsbSerialDriver driver = availableDrivers.get(0);
-        UsbDeviceConnection connection = manager.openDevice(driver.getDevice());
-
-        if (connection == null) {
-            if (!manager.hasPermission(driver.getDevice())) {
-                PendingIntent usbPermissionIntent = PendingIntent.getBroadcast(this, 0, new Intent(INTENT_ACTION_GRANT_USB), 0);
-                manager.requestPermission(driver.getDevice(), usbPermissionIntent);
-            }
-
-
-            Toast.makeText(this, "con yok", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        port = driver.getPorts().get(0); // Most devices have just one port (port 0)
         try {
-            port.open(connection);
-            port.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
             usbIoManager =new SerialInputOutputManager(port,mListener);
             mExecutor.submit(usbIoManager);
 
 
-            t=new Timer();
+            Timer t=new Timer();
             t.scheduleAtFixedRate(new TimerTask() {
                 @Override
                 public void run() {
                     try{
                         if (count > 10) {
-                            cominucationFlag=true;
-                            port.write(("1000100010001000.").getBytes(), 3);
+                            if (rcStatus!=2){//arm edilecek
+
+                                port.write(("1000100010001000.").getBytes(), 3);
+                            }else {
+                                String sendingMessage = "" + yaw + pitch + roll + throttle + ".";
+                                port.write((sendingMessage).getBytes(), 3);
+                            }
                         }
                         //usbIoManager.writeAsync(("000000000000.").getBytes());
                     }catch (Exception e){
                     }
                 }
             },0,4);
-
             Toast.makeText(this, "basarili", Toast.LENGTH_SHORT).show();
-            connectionFlag=true;
+            info.setText("Waiting");
 
         }catch (Exception e){
             Toast.makeText(this, "hataaa", Toast.LENGTH_SHORT).show();
@@ -275,9 +192,6 @@ public class MainActivity extends AppCompatActivity {
             float y = event.values[1];
             float z = event.values[2];
 
-            textGyroX.setText("X:" + String.format("%.2f",x) + " rad/s");
-            textGyroY.setText("Y:" + String.format("%.2f",y) + " rad/s");
-            textGyroZ.setText("Z:" + String.format("%.2f",z) + " rad/s");
         }
     };
 
@@ -289,13 +203,6 @@ public class MainActivity extends AppCompatActivity {
             float y = event.values[1];
             float z = event.values[2];
 
-            double roll=calculateRoll(x,y,z);
-            double pitch=calculatePitch(y,z);
-            textYaw.setText("0.0");
-            textRoll.setText(String.format("%.2f",roll));
-            textPitch.setText(String.format("%.2f",pitch));
-
-            updateArtificialHorizon(0.0f,(float)(int)pitch+1,(float)(int)roll+1);
 
 
         }
@@ -306,68 +213,67 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-
-    private void updateArtificialHorizon(float yaw,float pitch,float roll){
-        artificialHorizon.roll= roll;
-        artificialHorizon.pitch=pitch;
-        artificialHorizon.yaw=yaw;
-        artificialHorizon.invalidate();
-    }
-
-    private double calculatePitch(float y, float z){
-        double _roll  = (atan2(y, z)*180.0)/PI;
-        if (_roll >60.0)
-            return 60.0;
-        if (_roll <-60.0)
-            return -60.0;
-        return _roll;
-    }
-
-    private double calculateRoll(float x, float y, float z){
-        Double _pitch = (atan2(-x, sqrt(y*y + z*z))*180.0)/PI;
-        if (_pitch >60.0)
-            return 60.0;
-        if (_pitch<-60.0)
-            return -60.0;
-        return _pitch;
-    }
-
-    private void initViews(){
-        artificialHorizon=findViewById(R.id.horizon);
-        armBar=findViewById(R.id.arm);
-
-        textYaw=findViewById(R.id.yawTextView);
-        textPitch=findViewById(R.id.pitchTextView);
-        textRoll=findViewById(R.id.rollTextView);
-
-        textGyroX=findViewById(R.id.gyroXTextView);
-        textGyroY=findViewById(R.id.gyroYTextView);
-        textGyroZ=findViewById(R.id.gyroZTextView);
-
-        textRCYaw=findViewById(R.id.yawRCTextView);
-        textRCPitch=findViewById(R.id.pitchRCTextView);
-        textRCRoll=findViewById(R.id.rollRCTextView);
-        textRCThrottle=findViewById(R.id.throttleRCTextView);
-
-        textDataHertz=findViewById(R.id.dataHertzTextView);
-
-        textLidar=findViewById(R.id.lidarTextView);
-    }
-
-    private void updateSerialDatas(String comingText){
+    public void rcParse(String comingText){
         if (comingText.length()!=20){
             return;
         }
-        String yaw=comingText.substring(0,4);
-        String pitch=comingText.substring(4,8);
-        String roll=comingText.substring(8,12);
-        String throttle=comingText.substring(12,16);
-        String lidar=comingText.substring(16,20);
+        yaw=rcValueControl(Integer.parseInt(comingText.substring(0,4)));
+        pitch=rcValueControl(Integer.parseInt(comingText.substring(4,8)));
+        roll=rcValueControl(Integer.parseInt(comingText.substring(8,12)));
+        throttle=rcValueControl(Integer.parseInt(comingText.substring(12,16)));
+        lidar=lidarValueControl(Integer.parseInt(comingText.substring(16,20)));
 
-        textRCYaw.setText(yaw);
-        textRCPitch.setText(pitch);
-        textRCRoll.setText(roll);
-        textRCThrottle.setText(throttle);
-        textLidar.setText(lidar);
+
+        rcStatusChecker();
+
     }
+    private void rcStatusChecker(){
+        if (rcStatus == 0){ //waiting for arm
+            if ((yaw <=2000 && yaw >=1850) && (throttle >=1000 && throttle <=1150) && (pitch <=1600 && pitch >=1400) && (roll <=1600 && roll >=1400) ){
+                statusOneCounter++;
+            }
+            if (statusOneCounter>600){
+                rcStatus=1;
+                info.setText("Armed!");
+                statusOneCounter=0;
+            }
+        }else if (rcStatus == 1){ //waiting for throttle low
+            if ((yaw <=1600 && yaw >=1400) && (throttle >=1000 && throttle <=1150) && (pitch <=1600 && pitch >=1400) && (roll <=1600 && roll >=1400) ){
+                statusTwoCounter++;
+            }
+            if (statusTwoCounter>600){
+                rcStatus=2;
+                info.setText("Ready");
+                statusTwoCounter=0;
+            }
+        }else if (rcStatus == 2){ //waiting for disarm
+            if ((yaw <=1150 && yaw >=1000) && (throttle >=1000 && throttle <=1150) && (pitch <=1600 && pitch >=1400) && (roll <=1600 && roll >=1400) ){
+                statusThreeCounter++;
+            }
+            if (statusThreeCounter>600){
+                rcStatus=0;
+                info.setText("Stop!");
+                statusThreeCounter=0;
+            }
+        }
+    }
+
+    private int rcValueControl(int value){
+        if (value<1000){
+            return 1000;
+        }else if (value >2000){
+            return 2000;
+        }
+        return value;
+    }
+
+    private int lidarValueControl(int value){
+        if (value<0){
+            return 0;
+        }else if (value>10000){
+            return 9999;
+        }
+        return value;
+    }
+
 }
