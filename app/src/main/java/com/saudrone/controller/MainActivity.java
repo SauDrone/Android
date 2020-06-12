@@ -370,4 +370,12 @@ public class MainActivity extends AppCompatActivity {
         textRCThrottle.setText(throttle);
         textLidar.setText(lidar);
     }
+
+    public void pidpage(View view) {
+        Intent intent=new Intent(getApplicationContext(),PidTune.class);
+        startActivity(intent);
+    }
+
+    public void logpage(View view) {
+    }
 }
