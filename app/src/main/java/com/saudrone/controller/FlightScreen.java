@@ -5,6 +5,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -29,21 +30,36 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static com.saudrone.controller.MainActivity.port;
+import static java.lang.Math.PI;
+import static java.lang.Math.atan2;
+import static java.lang.Math.sqrt;
+import static java.lang.Math.toDegrees;
 
 public class FlightScreen extends AppCompatActivity {
-    int yaw=1000,pitch=1000,roll=1000,throttle=1000,lidar=0;
-    int rcStatus=0;
-    int statusOneCounter=0;
-    int statusTwoCounter=0;
-    int statusThreeCounter=0;
+    volatile int yaw=1000,pitch=1000,roll=1000,throttle=1000,lidar=0;
+    volatile int rcStatus=0;
+    volatile int statusOneCounter=0;
+    volatile int statusTwoCounter=0;
+    volatile int statusThreeCounter=0;
+
+    volatile long rcMappedYaw=0,rcMappedPitch=0,rcMappedRoll=0,rcThrottle;
+
+    volatile double gyroX,gyroY,gyroZ;
+    volatile double imuYaw,imuPitch,imuRoll;
+
+    PID acroRollPid,acroPitchPid;
+
+
     TextView info;
     SensorManager gyroManager, accManager;
     Sensor gyroSensor, accSensor;
 
+    TextView escFR,escFL,escBR,escBL;
+    TextView yawInfo,pitchInfo,rollInfo,throttleInfo;
     public String messageBuffer ="";
 
 
-    public int count=0;
+    public volatile int count=0;
     private final ExecutorService mExecutor = Executors.newSingleThreadExecutor();
     private SerialInputOutputManager mSerialIoManager;
     SerialInputOutputManager usbIoManager;
@@ -119,8 +135,19 @@ public class FlightScreen extends AppCompatActivity {
         this.requestWindowFeature(Window.FEATURE_NO_TITLE);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_flight_screen);
+        initPids();
+
 
         info=findViewById(R.id.textInfo);
+        escFR=findViewById(R.id.escFR);
+        escFL=findViewById(R.id.escFL);
+        escBL=findViewById(R.id.escBL);
+        escBR=findViewById(R.id.escBR);
+
+        yawInfo=findViewById(R.id.yawLog);
+        pitchInfo=findViewById(R.id.pitchLog);
+        rollInfo=findViewById(R.id.rollLog);
+        throttleInfo=findViewById(R.id.throttleLog);
 
         gyroManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         gyroSensor = gyroManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
@@ -150,7 +177,21 @@ public class FlightScreen extends AppCompatActivity {
 
                                 port.write(("1000100010001000.").getBytes(), 3);
                             }else {
-                                String sendingMessage = "" + yaw + pitch + roll + throttle + ".";
+                                /**
+                                 * MAIN CONTROL STARTS BLOCK
+                                 */
+
+                                // TODO: 6/13/2020 buraya pid kodları gelecek
+                                double errorPitch= acroPitchPid.process(rcMappedPitch,gyroX);
+                                double errorRoll= acroRollPid.process(rcMappedRoll,gyroY);
+                                int FL=(int) Math.round(rcThrottle + errorPitch + errorRoll);
+                                int FR=(int) Math.round(rcThrottle + errorPitch - errorRoll);
+                                int BR=(int) Math.round(rcThrottle - errorPitch - errorRoll);
+                                int BL=(int) Math.round(rcThrottle - errorPitch + errorRoll);
+
+
+                                //String sendingMessage = "" + yaw + pitch + roll + throttle + ".";
+                                String sendingMessage= ""+ FL+FR+BR+BL+".";
                                 port.write((sendingMessage).getBytes(), 3);
                             }
                         }
@@ -192,6 +233,12 @@ public class FlightScreen extends AppCompatActivity {
             float y = event.values[1];
             float z = event.values[2];
 
+            gyroX=toDegrees(x);
+            gyroY=toDegrees(y);
+            gyroZ=toDegrees(z);
+
+
+
         }
     };
 
@@ -202,6 +249,9 @@ public class FlightScreen extends AppCompatActivity {
             float x = event.values[0];
             float y = event.values[1];
             float z = event.values[2];
+
+            imuRoll=calculateRoll(x,y,z);
+            imuPitch=calculatePitch(y,z);
 
 
 
@@ -222,6 +272,20 @@ public class FlightScreen extends AppCompatActivity {
         roll=rcValueControl(Integer.parseInt(comingText.substring(8,12)));
         throttle=rcValueControl(Integer.parseInt(comingText.substring(12,16)));
         lidar=lidarValueControl(Integer.parseInt(comingText.substring(16,20)));
+
+        rcMappedYaw=-map(yaw,1000,2000,-10,10);
+        rcMappedPitch=-map(pitch,1000,2000,-10,10);
+        rcMappedRoll=map(roll,1000,2000,-10,10);
+        rcThrottle=throttle;
+
+        /*
+        if (count%201==0){
+            yawInfo.setText(""+rcMappedYaw);
+            pitchInfo.setText(""+rcMappedPitch);
+            rollInfo.setText(""+rcMappedRoll);
+            throttleInfo.setText(""+rcThrottle);
+        }
+        */
 
 
         rcStatusChecker();
@@ -275,5 +339,56 @@ public class FlightScreen extends AppCompatActivity {
         }
         return value;
     }
+
+    private long map(long x, long in_min, long in_max, long out_min, long out_max)
+    {
+        return (long) ( (double)(x - in_min) * (out_max - out_min) / (double)(in_max - in_min) + out_min);
+    }
+
+    private double calculatePitch(float y, float z){
+        double _roll  = (atan2(y, z)*180.0)/PI;
+        if (_roll >60.0)
+            return 60.0;
+        if (_roll <-60.0)
+            return -60.0;
+        return _roll;
+    }
+
+    private double calculateRoll(float x, float y, float z){
+        Double _pitch = (atan2(-x, sqrt(y*y + z*z))*180.0)/PI;
+        if (_pitch >60.0)
+            return 60.0;
+        if (_pitch<-60.0)
+            return -60.0;
+        return _pitch;
+    }
+
+    private void initPids(){
+        double acroPitchP=Double.parseDouble(prefCek(Constanst.acroPitchPName,Constanst.acroPitchPKey,"0.000"));
+        double acroPitchI=Double.parseDouble(prefCek(Constanst.acroPitchIName,Constanst.acroPitchIKey,"0.000"));
+        double acroPitchD=Double.parseDouble(prefCek(Constanst.acroPitchDName,Constanst.acroPitchDKey,"0.000"));
+
+        double acroRollP=Double.parseDouble(prefCek(Constanst.acroRollPName,Constanst.acroRollPKey,"0.000"));
+        double acroRollI=Double.parseDouble(prefCek(Constanst.acroRollIName,Constanst.acroRollIKey,"0.000"));
+        double acroRollD=Double.parseDouble(prefCek(Constanst.acroRollDName,Constanst.acroRollDKey,"0.000"));
+
+        acroPitchPid =new PID(acroPitchP,acroPitchI,acroPitchD);
+        acroRollPid  =new PID(acroRollP,acroRollI,acroRollD);
+    }
+
+    private void prefEkle(String name,String key,String value){
+        SharedPreferences sharedPreferences=getSharedPreferences(name,MODE_PRIVATE);
+        SharedPreferences.Editor editor=sharedPreferences.edit();
+        editor.putString(key,value);
+        editor.apply();
+    }
+
+
+
+    private String prefCek(String name,String key,String yoksa){
+        SharedPreferences sharedPreferences=getSharedPreferences(name,MODE_PRIVATE);
+        return sharedPreferences.getString(key,yoksa);
+    }
+
 
 }
