@@ -25,8 +25,11 @@ import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
 import com.saudrone.canvas.ArtificialHorizon;
 
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -187,7 +190,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         });
-
 
     }
 
@@ -377,5 +379,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void logpage(View view) {
+        Intent intent=new Intent(MainActivity.this,FlightLogs.class);
+        startActivity(intent);
     }
 }

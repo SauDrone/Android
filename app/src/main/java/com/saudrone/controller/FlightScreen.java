@@ -22,7 +22,14 @@ import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
 
+import java.io.File;
+import java.io.FileWriter;
 import java.nio.charset.StandardCharsets;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -32,6 +39,7 @@ import java.util.concurrent.Executors;
 import static com.saudrone.controller.MainActivity.port;
 import static java.lang.Math.PI;
 import static java.lang.Math.atan2;
+import static java.lang.Math.log;
 import static java.lang.Math.sqrt;
 import static java.lang.Math.toDegrees;
 
@@ -47,6 +55,9 @@ public class FlightScreen extends AppCompatActivity {
     volatile double gyroX,gyroY,gyroZ;
     volatile double imuYaw,imuPitch,imuRoll;
 
+    volatile double errorPitch,errorRoll;
+    volatile  int FL,FR,BR,BL;
+
     PID acroRollPid,acroPitchPid;
 
 
@@ -57,8 +68,9 @@ public class FlightScreen extends AppCompatActivity {
     TextView escFR,escFL,escBR,escBL;
     TextView yawInfo,pitchInfo,rollInfo,throttleInfo;
     public String messageBuffer ="";
+    ArrayList<String> logDatas;
 
-
+    Timer logTimer;
     public volatile int count=0;
     private final ExecutorService mExecutor = Executors.newSingleThreadExecutor();
     private SerialInputOutputManager mSerialIoManager;
@@ -138,6 +150,7 @@ public class FlightScreen extends AppCompatActivity {
         initPids();
 
 
+        logTimer=new Timer();
         info=findViewById(R.id.textInfo);
         escFR=findViewById(R.id.escFR);
         escFL=findViewById(R.id.escFL);
@@ -155,6 +168,8 @@ public class FlightScreen extends AppCompatActivity {
         accManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         accSensor = accManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
 
+        logDatas=new ArrayList<>();
+
         baglan();
 
     }
@@ -165,6 +180,7 @@ public class FlightScreen extends AppCompatActivity {
         try {
             usbIoManager =new SerialInputOutputManager(port,mListener);
             mExecutor.submit(usbIoManager);
+
 
 
             Timer t=new Timer();
@@ -181,13 +197,14 @@ public class FlightScreen extends AppCompatActivity {
                                  * MAIN CONTROL STARTS BLOCK
                                  */
 
-                                // TODO: 6/13/2020 buraya pid kodları gelecek
-                                double errorPitch= acroPitchPid.process(rcMappedPitch,gyroX);
-                                double errorRoll= acroRollPid.process(rcMappedRoll,gyroY);
-                                int FL=(int) Math.round(rcThrottle + errorPitch + errorRoll);
-                                int FR=(int) Math.round(rcThrottle + errorPitch - errorRoll);
-                                int BR=(int) Math.round(rcThrottle - errorPitch - errorRoll);
-                                int BL=(int) Math.round(rcThrottle - errorPitch + errorRoll);
+
+                                errorPitch= acroPitchPid.process(rcMappedPitch,gyroX);
+                                errorRoll= acroRollPid.process(rcMappedRoll,gyroY);
+                                FL=(int) Math.round(rcThrottle + errorPitch + errorRoll);
+                                FR=(int) Math.round(rcThrottle + errorPitch - errorRoll);
+                                BR=(int) Math.round(rcThrottle - errorPitch - errorRoll);
+                                BL=(int) Math.round(rcThrottle - errorPitch + errorRoll);
+                                // TODO: 6/14/2020 <1000 control 
 
 
                                 //String sendingMessage = "" + yaw + pitch + roll + throttle + ".";
@@ -199,7 +216,7 @@ public class FlightScreen extends AppCompatActivity {
                     }catch (Exception e){
                     }
                 }
-            },0,4);
+            },0,5);
             Toast.makeText(this, "basarili", Toast.LENGTH_SHORT).show();
             info.setText("Waiting");
 
@@ -273,10 +290,11 @@ public class FlightScreen extends AppCompatActivity {
         throttle=rcValueControl(Integer.parseInt(comingText.substring(12,16)));
         lidar=lidarValueControl(Integer.parseInt(comingText.substring(16,20)));
 
+
         rcMappedYaw=-map(yaw,1000,2000,-10,10);
         rcMappedPitch=-map(pitch,1000,2000,-10,10);
         rcMappedRoll=map(roll,1000,2000,-10,10);
-        rcThrottle=throttle;
+        rcThrottle=map(throttle,1000,2000,1000,1500);
 
         /*
         if (count%201==0){
@@ -296,7 +314,7 @@ public class FlightScreen extends AppCompatActivity {
             if ((yaw <=2000 && yaw >=1850) && (throttle >=1000 && throttle <=1150) && (pitch <=1600 && pitch >=1400) && (roll <=1600 && roll >=1400) ){
                 statusOneCounter++;
             }
-            if (statusOneCounter>600){
+            if (statusOneCounter>300){
                 rcStatus=1;
                 info.setText("Armed!");
                 statusOneCounter=0;
@@ -305,20 +323,69 @@ public class FlightScreen extends AppCompatActivity {
             if ((yaw <=1600 && yaw >=1400) && (throttle >=1000 && throttle <=1150) && (pitch <=1600 && pitch >=1400) && (roll <=1600 && roll >=1400) ){
                 statusTwoCounter++;
             }
-            if (statusTwoCounter>600){
+            if (statusTwoCounter>300){
                 rcStatus=2;
                 info.setText("Ready");
                 statusTwoCounter=0;
+                DateFormat df = new SimpleDateFormat("dd-MM-yyyy----HH-mm-ss");
+                Date today = Calendar.getInstance().getTime();
+                String reportDate = df.format(today);
+                logDatas.add(reportDate);
+                logTimer.scheduleAtFixedRate(new TimerTask() {
+                    @Override
+                    public void run() {
+                        try{
+                            DateFormat df = new SimpleDateFormat("HH-mm-ss--SSS");
+                            Date today = Calendar.getInstance().getTime();
+                            String _date = df.format(today);
+                            logDatas.add(_date);
+                            logDatas.add("Gyro--> X:"+gyroX+" Y:"+gyroY+" Z:"+gyroZ);
+                            logDatas.add("İmu---> Pitch:"+imuPitch+" Roll:"+imuRoll);
+                            logDatas.add("RC ---> Yaw:"+yaw+" pitch:"+pitch + " roll:"+roll +" throttle:"+throttle);
+                            logDatas.add("RCmp--> Yaw:"+rcMappedYaw+" pitch:"+rcMappedPitch+" roll:"+rcMappedRoll+" throttle:"+rcThrottle);
+                            logDatas.add("PID---> errorRoll:"+errorRoll+" errorPitch:"+errorPitch);
+                            logDatas.add("ESC---> FL:"+FL+" FR:"+FR+" BL:"+BL+ " BR:"+BR);
+                            logDatas.add("---------------------------");
+                        }catch (Exception e){
+                        }
+                    }
+                },0,30);
             }
         }else if (rcStatus == 2){ //waiting for disarm
             if ((yaw <=1150 && yaw >=1000) && (throttle >=1000 && throttle <=1150) && (pitch <=1600 && pitch >=1400) && (roll <=1600 && roll >=1400) ){
                 statusThreeCounter++;
             }
-            if (statusThreeCounter>600){
+            if (statusThreeCounter>300){
                 rcStatus=0;
                 info.setText("Stop!");
                 statusThreeCounter=0;
+                logTimer.cancel();
+                writeLogs();
+                logDatas.clear();
             }
+        }
+    }
+
+    private void writeLogs(){
+        String sFolderName="SaudroneLogs";
+        String sFileName=logDatas.get(0)+".txt";
+        File file = new File(getApplication().getFilesDir(),sFolderName);
+        if(!file.exists()){
+            file.mkdir();
+        }
+        try{
+            File gpxfile = new File(file, sFileName);
+            FileWriter writer = new FileWriter(gpxfile);
+            for (int i=0;i<logDatas.size();i++){
+                writer.append(logDatas.get(i)+"\n\r");
+            }
+            writer.flush();
+            writer.close();
+
+            Toast.makeText(this, "Dosyaya yazıldı", Toast.LENGTH_LONG).show();
+
+        }catch (Exception e){
+
         }
     }
 
@@ -372,17 +439,10 @@ public class FlightScreen extends AppCompatActivity {
         double acroRollI=Double.parseDouble(prefCek(Constanst.acroRollIName,Constanst.acroRollIKey,"0.000"));
         double acroRollD=Double.parseDouble(prefCek(Constanst.acroRollDName,Constanst.acroRollDKey,"0.000"));
 
+
         acroPitchPid =new PID(acroPitchP,acroPitchI,acroPitchD);
         acroRollPid  =new PID(acroRollP,acroRollI,acroRollD);
     }
-
-    private void prefEkle(String name,String key,String value){
-        SharedPreferences sharedPreferences=getSharedPreferences(name,MODE_PRIVATE);
-        SharedPreferences.Editor editor=sharedPreferences.edit();
-        editor.putString(key,value);
-        editor.apply();
-    }
-
 
 
     private String prefCek(String name,String key,String yoksa){

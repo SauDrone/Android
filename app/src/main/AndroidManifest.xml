@@ -9,7 +9,9 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
-        <activity android:name=".PidTune"></activity>
+        <activity android:name=".ReadLog"></activity>
+        <activity android:name=".FlightLogs" />
+        <activity android:name=".PidTune" />
         <activity android:name=".FlightScreen" />
         <activity android:name=".MainActivity">
             <intent-filter>
